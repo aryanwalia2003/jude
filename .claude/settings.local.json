@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(engineering-orchestrator)",
+      "Bash(uv --version)",
+      "Bash(python3 -c \"import tree_sitter; print\\('tree-sitter:', tree_sitter.__version__\\)\")",
+      "Bash(python3 -c \"import tree_sitter_language_pack; print\\('lang-pack: ok'\\)\")",
+      "Bash(python3 -c \"import sqlite3; print\\('sqlite3:', sqlite3.sqlite_version\\)\")",
+      "Bash(python3 -c \"import rich; print\\('rich:', rich.__version__\\)\")",
+      "Bash(python3 -c \"import typer; print\\('typer:', typer.__version__\\)\")",
+      "Bash(python3 -c \"import networkx; print\\('networkx:', networkx.__version__\\)\")",
+      "Bash(python3 -c \"import tree_sitter; print\\(dir\\(tree_sitter\\)\\)\")",
+      "Bash(python3 -c \"from tree_sitter import Language, Parser; print\\('Language, Parser: ok'\\)\")",
+      "Bash(python3 -c \"import tree_sitter_language_pack; print\\('lang-pack attrs:', [x for x in dir\\(tree_sitter_language_pack\\) if not x.startswith\\('_'\\)][:10]\\)\")",
+      "Bash(python3 *)",
+      "Bash(mkdir -p /home/aryanwalia/ai-infra/repo-index/repo_index/parsers)",
+      "Bash(mkdir -p /home/aryanwalia/ai-infra/repo-index/tests)",
+      "Bash(pip install *)",
+      "Bash(pip --version)",
+      "Bash(repo-index *)",
+      "Bash(pip show *)",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python *)"
+    ]
+  }
+}
