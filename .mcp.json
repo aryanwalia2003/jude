@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "repo-index": {
+      "type": "stdio",
+      "command": "/home/aryanwalia/.local/bin/repo-index-mcp"
+    }
+  }
+}

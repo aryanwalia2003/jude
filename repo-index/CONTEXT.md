@@ -17,7 +17,7 @@ pre-LLM context assembly.
 | 4 | Retrieval Engine — FTS5 search, call graph, blast radius, context assembly | Done |
 | 4.5 | Semantic Resolution — FQIDs, import alias tracking, cross-file resolution | Done |
 | 5 | Semantic Summarization — LLM-generated summaries per symbol | Planned |
-| 6 | MCP Server — expose intelligence layer to Claude Code / Cursor | Planned |
+| 6 | MCP Server — expose intelligence layer to Claude Code / Cursor | Done |
 
 **Tests:** 140 passing across 6 test files.  
 **Install:** `pip install -e ~/ai-infra/repo-index`  
@@ -572,15 +572,34 @@ They are invalidated when the symbol's `hash` changes.
 
 ---
 
-## Planned: Phase 6 — MCP Server
+## Phase 6 — MCP Server (Done)
 
-Expose `retrieval.py` via the Model Context Protocol so Claude Code,
-Cursor, Codex and other agents can share the same persistent intelligence
-layer without re-scanning.
+Package: `~/ai-infra/mcp-server/` — `pip install -e ~/ai-infra/mcp-server`  
+Binary: `repo-index-mcp` (stdio transport, FastMCP 1.27.0)  
+Config: `~/ai-infra/.mcp.json` — Claude Code loads this automatically.
 
-Capabilities to expose:
-- `symbol_lookup(name)`
-- `search(query, kind, limit)`
-- `callgraph(name, depth)`
-- `impact(name, depth)`
-- `context(name)` → full `RetrievalContext`
+```
+mcp-server/
+├── pyproject.toml
+└── repo_index_mcp/
+    ├── connection.py   — open_connection(), honours REPO_INDEX_DB env var
+    ├── serializers.py  — sqlite3.Row / RetrievalContext → JSON-serializable dict
+    └── server.py       — FastMCP app + 12 tools
+```
+
+### Tools exposed
+
+| Group | Tool | Maps to |
+|-------|------|---------|
+| Search | `search_symbols(query, kind?, limit)` | `retrieval.search` |
+| Symbols | `get_symbol(name)` | `db.query_symbol` |
+| Symbols | `get_symbol_by_fqid(fqid)` | `db.query_symbol_by_fqid` |
+| Symbols | `get_callers(name)` | `db.query_callers` |
+| Symbols | `get_owned_symbols(class_name)` | `db.query_owned_symbols` |
+| Symbols | `get_module_symbols(module_name)` | `db.query_module_symbols` |
+| Graph | `get_callgraph(name, max_depth)` | `retrieval.get_callgraph` |
+| Graph | `get_impact(name, max_depth)` | `retrieval.get_impact` |
+| Graph | `get_context(name, depth)` | `retrieval.get_context` |
+| Meta | `get_stats()` | `db.stats` |
+| Meta | `list_files()` | raw SQL on `files` |
+| Meta | `build_index(path)` | `indexer.build_index` |

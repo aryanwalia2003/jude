@@ -20,7 +20,19 @@
       "Bash(repo-index *)",
       "Bash(pip show *)",
       "Bash(python -m pytest tests/ -x -q)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Skill(clean-code)",
+      "Bash(REPO_INDEX_DB=/tmp/smoke-test.db python3 -c ' *)",
+      "Bash(repo-index-mcp --help)",
+      "Bash(timeout 3 repo-index-mcp)",
+      "Bash(timeout 5 /home/aryanwalia/.local/bin/repo-index-mcp)",
+      "mcp__repo-index__build_index",
+      "Bash(REPO_INDEX_DB=/home/aryanwalia/.local/share/repo-index/index.db repo-index build /home/aryanwalia/ai-infra/repo-index)",
+      "mcp__repo-index__get_stats",
+      "mcp__repo-index__get_context"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "repo-index"
+  ]
 }
