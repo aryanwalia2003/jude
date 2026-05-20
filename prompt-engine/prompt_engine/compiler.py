@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from typing import Optional
 
+from typing import TYPE_CHECKING
+
 from .contracts import get_contract
 from .policy import PolicyRegistry, build_registry
 from .taxonomy import Constraint, Mode, TaskType
 from .task import ContextBudget, PromptBlock, PromptPlan, Task
 from .budget import enforce_budget
 from .config import EngineConfig
+
+if TYPE_CHECKING:
+    from .retrieval import ContextBundle
 
 
 # Priority constants for prompt block ordering
@@ -111,10 +116,19 @@ def _constraints_block(task: Task) -> PromptBlock:
 
 
 # ---------------------------------------------------------------------------
-# Context placeholder block
+# Context block — placeholder or filled from retrieval
 # ---------------------------------------------------------------------------
 
-def _context_block(task: Task) -> PromptBlock:
+def _context_block(task: Task, bundle: "ContextBundle | None" = None) -> PromptBlock:
+    if bundle is not None and not bundle.is_empty:
+        return PromptBlock(
+            role="context",
+            content=bundle.raw_text,
+            priority=_P_CONTEXT,
+            token_estimate=bundle.token_estimate,
+            source="repo_index_retrieval",
+        )
+
     if not task.retrieval_plan:
         return PromptBlock(
             role="context",
@@ -135,7 +149,7 @@ def _context_block(task: Task) -> PromptBlock:
         role="context",
         content="\n".join(lines),
         priority=_P_CONTEXT,
-        source="retrieval_plan",
+        source="retrieval_plan_placeholder",
     )
 
 
@@ -210,6 +224,7 @@ def compile_task(
     task: Task,
     config: Optional[EngineConfig] = None,
     registry: Optional[PolicyRegistry] = None,
+    bundle: "ContextBundle | None" = None,
 ) -> PromptPlan:
     """Compile a Task into an ordered, budgeted PromptPlan. No LLM involved."""
     if registry is None:
@@ -220,7 +235,7 @@ def compile_task(
         _system_block(task, registry),
         _task_block(task),
         _constraints_block(task),
-        _context_block(task),
+        _context_block(task, bundle),
         _output_contract_block(task),
         _verification_block(task),
     ]

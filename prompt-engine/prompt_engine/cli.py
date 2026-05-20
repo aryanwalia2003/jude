@@ -18,6 +18,7 @@ from .config import EngineConfig, load_config, write_default_config
 from .contracts import get_contract
 from .intent import IntentResult, build_task, classify
 from .policy import build_registry
+from .retrieval import ContextBundle, retrieve
 from .presets import (
     CLI_VERB_ALIASES,
     get_preset,
@@ -74,11 +75,16 @@ def _load_cfg() -> EngineConfig:
 # _render_plan — rich output for explain/dry-run
 # ---------------------------------------------------------------------------
 
-def _render_plan(task: Task, intent: IntentResult, dry_run: bool = False) -> None:
+def _render_plan(
+    task: Task,
+    intent: IntentResult,
+    dry_run: bool = False,
+    bundle: ContextBundle | None = None,
+) -> None:
     from .budget import compression_summary
     from .compiler import compile_task
 
-    plan = compile_task(task)
+    plan = compile_task(task, bundle=bundle)
     cfg = _load_cfg()
 
     # Task plan panel
@@ -112,11 +118,27 @@ def _render_plan(task: Task, intent: IntentResult, dry_run: bool = False) -> Non
             ct.add_row(f"✓ {c.value}", desc)
         console.print(Panel(ct, title=f"[bold]Constraints ({len(task.constraints)})[/bold]", border_style="yellow"))
 
-    # Context plan
-    if task.retrieval_plan:
+    # Context plan — show retrieval results if available, otherwise show plan
+    if bundle is not None and not bundle.is_empty:
+        lines = [f"[green]✓ {bundle.symbol_count} symbol(s) retrieved[/green]"]
+        for sym in bundle.symbols:
+            lines.append(f"  [cyan]{sym.name}[/cyan]  [{sym.kind}]  [dim]{sym.file_path}:{sym.start_line}–{sym.end_line}[/dim]")
+            if sym.calls:
+                lines.append(f"    calls: [dim]{', '.join(sym.calls[:5])}[/dim]")
+            if sym.called_by:
+                lines.append(f"    called_by: [dim]{', '.join(sym.called_by[:5])}[/dim]")
+        if bundle.git_diff:
+            lines.append(f"\n  [dim]{bundle.git_diff}[/dim]")
+        for note in bundle.retrieval_notes:
+            lines.append(f"  [dim]note: {note}[/dim]")
+        console.print(Panel("\n".join(lines), title=f"[bold]Context — Retrieved ({bundle.token_estimate} tokens)[/bold]", border_style="green"))
+    elif bundle is not None and bundle.is_empty:
+        notes_text = "\n".join(f"  [yellow]• {n}[/yellow]" for n in bundle.retrieval_notes)
+        console.print(Panel(notes_text or "  No context retrieved.", title="[bold]Context — No Results[/bold]", border_style="yellow"))
+    elif task.retrieval_plan:
         rp = task.retrieval_plan
         rp_lines = "\n".join(rp.describe())
-        console.print(Panel(rp_lines, title="[bold]Context Plan[/bold]", border_style="blue"))
+        console.print(Panel(rp_lines, title="[bold]Context Plan (not yet retrieved)[/bold]", border_style="blue"))
 
     # Output contract
     contract = get_contract(task.task_type)
@@ -167,6 +189,7 @@ def _run_task(
     compact: bool,
     strict: bool,
     safe_flag: bool,
+    no_retrieve: bool = False,
 ) -> None:
     cfg = _load_cfg()
 
@@ -211,20 +234,29 @@ def _run_task(
         no_tests=no_tests,
     )
 
+    # Retrieve context from repo-index unless explicitly skipped
+    bundle: ContextBundle | None = None
+    if not no_retrieve and task.retrieval_plan and task.context_budget:
+        bundle = retrieve(
+            plan=task.retrieval_plan,
+            budget=task.context_budget,
+            repo_root=Path.cwd(),
+        )
+
     if explain or dry_run:
-        _render_plan(task, intent, dry_run=dry_run)
+        _render_plan(task, intent, dry_run=dry_run, bundle=bundle)
         return
 
     if compact:
-        _print_compact(task)
+        _print_compact(task, bundle)
         return
 
-    _render_plan(task, intent, dry_run=True)
+    _render_plan(task, intent, dry_run=True, bundle=bundle)
 
 
-def _print_compact(task: Task) -> None:
+def _print_compact(task: Task, bundle: ContextBundle | None = None) -> None:
     from .compiler import compile_task
-    plan = compile_task(task)
+    plan = compile_task(task, bundle=bundle)
     console.print(plan.compile())
 
 
@@ -265,6 +297,7 @@ def _make_task_command(task_type: TaskType, name: str, help_text: str):
         compact: bool = typer.Option(False, "--compact", help="Output compiled prompt only"),
         strict: bool = typer.Option(False, "--strict", help="Apply strict mode"),
         safe: bool = typer.Option(False, "--safe", help="Apply safe mode"),
+        no_retrieve: bool = typer.Option(False, "--no-retrieve", help="Skip repo-index retrieval"),
     ) -> None:
         _run_task(
             goal=goal,
@@ -280,6 +313,7 @@ def _make_task_command(task_type: TaskType, name: str, help_text: str):
             compact=compact,
             strict=strict,
             safe_flag=safe,
+            no_retrieve=no_retrieve,
         )
 
     _cmd.__name__ = f"cmd_{name}"
@@ -320,6 +354,7 @@ def cmd_run(
     compact: bool = typer.Option(False, "--compact"),
     strict: bool = typer.Option(False, "--strict"),
     safe: bool = typer.Option(False, "--safe"),
+    no_retrieve: bool = typer.Option(False, "--no-retrieve", help="Skip repo-index retrieval"),
 ) -> None:
     hint: Optional[TaskType] = None
     if task_type:
@@ -346,6 +381,7 @@ def cmd_run(
         compact=compact,
         strict=strict,
         safe_flag=safe,
+        no_retrieve=no_retrieve,
     )
 
 
@@ -362,9 +398,11 @@ def cmd_plan(
     preset: Optional[str] = typer.Option(None, "--preset"),
 ) -> None:
     hint = CLI_VERB_ALIASES.get((task_type or "").lower())
-    intent = classify(goal, hint_task_type=hint, hint_mode=_parse_mode(mode), hint_scope=scope)
-    task = build_task(goal, hint_task_type=hint, hint_mode=_parse_mode(mode), hint_scope=scope)
-    _render_plan(task, intent, dry_run=False)
+    m = _parse_mode(mode)
+    intent = classify(goal, hint_task_type=hint, hint_mode=m, hint_scope=scope)
+    task = build_task(goal, hint_task_type=hint, hint_mode=m, hint_scope=scope)
+    bundle = _auto_retrieve(task)
+    _render_plan(task, intent, dry_run=False, bundle=bundle)
 
 
 @app.command(name="inspect", help="Show what prompt would be compiled for a goal.")
@@ -373,11 +411,28 @@ def cmd_inspect(
     task_type: Optional[str] = typer.Option(None, "--type", "-t"),
     mode: Optional[str] = typer.Option(None, "--mode", "-m"),
     scope: Optional[str] = typer.Option(None, "--scope", "-s"),
+    no_retrieve: bool = typer.Option(False, "--no-retrieve"),
 ) -> None:
     hint = CLI_VERB_ALIASES.get((task_type or "").lower())
-    intent = classify(goal, hint_task_type=hint, hint_mode=_parse_mode(mode), hint_scope=scope)
-    task = build_task(goal, hint_task_type=hint, hint_mode=_parse_mode(mode), hint_scope=scope)
-    _render_plan(task, intent, dry_run=True)
+    m = _parse_mode(mode)
+    intent = classify(goal, hint_task_type=hint, hint_mode=m, hint_scope=scope)
+    task = build_task(goal, hint_task_type=hint, hint_mode=m, hint_scope=scope)
+    bundle = None if no_retrieve else _auto_retrieve(task)
+    _render_plan(task, intent, dry_run=True, bundle=bundle)
+
+
+# ---------------------------------------------------------------------------
+# Retrieval helper
+# ---------------------------------------------------------------------------
+
+def _auto_retrieve(task: Task) -> ContextBundle | None:
+    """Run retrieval silently; return None on hard failure."""
+    if not task.retrieval_plan or not task.context_budget:
+        return None
+    try:
+        return retrieve(plan=task.retrieval_plan, budget=task.context_budget, repo_root=Path.cwd())
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
