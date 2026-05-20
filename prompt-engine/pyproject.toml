@@ -14,6 +14,12 @@ dependencies = [
 [project.scripts]
 ai = "prompt_engine.cli:app"
 
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["prompt_engine*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
