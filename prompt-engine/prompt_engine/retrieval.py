@@ -394,6 +394,18 @@ def _resolve_db(repo_root: Optional[Path]) -> Path:
     env = os.environ.get("REPO_INDEX_DB")
     if env:
         return Path(env)
+    if repo_root:
+        # Use the same per-repo naming convention as the CLI and MCP server
+        db_dir = Path.home() / ".local" / "share" / "repo-index"
+        # Resolve to git root if possible, then use its directory name
+        if _AVAILABLE:
+            git_r = _ri_git.git_root(repo_root)
+            effective = git_r if git_r else repo_root
+        else:
+            effective = repo_root
+        named = db_dir / f"{effective.name}.db"
+        if named.exists():
+            return named
     return _DEFAULT_DB
 
 

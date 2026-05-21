@@ -18,11 +18,21 @@ from .watcher import FileWatcher
 app = typer.Typer(help="Repository intelligence — AST-aware symbol index.", add_completion=False)
 console = Console()
 
-_DEFAULT_DB = Path.home() / ".local" / "share" / "repo-index" / "index.db"
+_DB_DIR = Path.home() / ".local" / "share" / "repo-index"
+_DEFAULT_DB = _DB_DIR / "index.db"
 
 
-def _db_path(db_file: Optional[Path]) -> Path:
-    return db_file or Path(os.environ.get("REPO_INDEX_DB", str(_DEFAULT_DB)))
+def _db_path(db_file: Optional[Path], cwd: Optional[Path] = None) -> Path:
+    """Resolve DB path. Priority: explicit flag > REPO_INDEX_DB env > git-root name > default."""
+    if db_file:
+        return db_file
+    env = os.environ.get("REPO_INDEX_DB")
+    if env:
+        return Path(env)
+    repo_root = git.git_root(cwd or Path.cwd())
+    if repo_root:
+        return _DB_DIR / f"{repo_root.name}.db"
+    return _DEFAULT_DB
 
 
 @app.command()
@@ -36,7 +46,7 @@ def build(
         console.print(f"[red]Not a directory:[/red] {root}")
         raise typer.Exit(1)
 
-    db_path = _db_path(db_file)
+    db_path = _db_path(db_file, cwd=root)
     conn = db.open_db(db_path)
 
     branch = git.current_branch(root)
@@ -45,6 +55,7 @@ def build(
 
     with console.status("Scanning and parsing..."):
         stats = indexer.build_index(conn, root, branch=branch or None)
+    db.set_repo_root(conn, str(root))
 
     table = Table(box=box.SIMPLE, show_header=False)
     table.add_column("key", style="dim")

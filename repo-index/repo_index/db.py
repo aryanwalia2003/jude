@@ -7,6 +7,7 @@ from pathlib import Path
 
 _META_CURRENT_BRANCH = "current_branch"
 _META_SCHEMA_VERSION = "schema_version"
+_META_REPO_ROOT = "repo_root"
 _SCHEMA_VERSION = "2"
 
 SCHEMA = """
@@ -315,6 +316,15 @@ def get_current_branch(conn: sqlite3.Connection) -> str:
 
 def set_current_branch(conn: sqlite3.Connection, branch: str) -> None:
     set_meta(conn, _META_CURRENT_BRANCH, branch)
+
+
+def get_repo_root(conn: sqlite3.Connection) -> str | None:
+    return get_meta(conn, _META_REPO_ROOT)
+
+
+def set_repo_root(conn: sqlite3.Connection, root: str) -> None:
+    set_meta(conn, _META_REPO_ROOT, root)
+    conn.commit()
 
 
 def delete_orphaned_files(conn: sqlite3.Connection, known_paths: set[str]) -> int:
