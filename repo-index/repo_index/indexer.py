@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import db, git
+from .graph import invalidate_graph_cache
 from .parsers import get_parser
 from .parsers.base import ImportAliasRecord, ParseResult, RelationRecord, SymbolRecord
 from .scanner import discover_files
@@ -69,6 +70,7 @@ def build_index(conn: sqlite3.Connection, root: Path, branch: str | None = None)
                 stats.relations_added += result[1]
         stats.removed = db.delete_orphaned_files(conn, known_paths)
 
+    invalidate_graph_cache(conn)
     return stats
 
 

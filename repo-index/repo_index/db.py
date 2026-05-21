@@ -364,6 +364,38 @@ def search_symbols(
     return conn.execute(sql, (fts_query, limit)).fetchall()
 
 
+def search_symbols_ranked(
+    conn: sqlite3.Connection,
+    query: str,
+    kind: str | None = None,
+    limit: int = 20,
+) -> list[sqlite3.Row]:
+    """FTS5 search enriched with caller_count and file recency for multi-signal re-ranking.
+
+    Returns up to limit*2 candidates so the caller can re-rank and trim to limit.
+    """
+    fts_query = _to_fts_query(query)
+    kind_clause = "AND s.kind = ?" if kind else ""
+    sql = f"""
+        SELECT s.id, s.name, s.kind, s.file_path, s.start_line, s.end_line,
+               bm25(symbols_fts) AS bm25_score,
+               COALESCE(f.last_indexed_at, 0) AS last_indexed_at,
+               (SELECT COUNT(*) FROM relations r2
+                WHERE r2.to_name = s.name AND r2.relation = 'CALLS') AS caller_count
+        FROM symbols_fts
+        JOIN symbols s ON symbols_fts.rowid = s.id
+        LEFT JOIN files f ON s.file_path = f.path
+        WHERE symbols_fts MATCH ?
+        {kind_clause}
+        ORDER BY bm25_score
+        LIMIT ?"""
+    params: list = [fts_query]
+    if kind:
+        params.append(kind)
+    params.append(limit * 2)
+    return conn.execute(sql, params).fetchall()
+
+
 def _to_fts_query(raw: str) -> str:
     tokens = raw.strip().split()
     if not tokens:

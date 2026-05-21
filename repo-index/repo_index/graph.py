@@ -1,8 +1,5 @@
 """NetworkX call graph built from the relations table.
 
-The graph is built on demand — no persistent caching. For large repos
-this is fast enough; add caching at the call site if needed.
-
 Edge A → B means: A CALLS B.
 """
 
@@ -10,6 +7,10 @@ import sqlite3
 from collections import deque
 
 import networkx as nx
+
+# Per-connection graph cache keyed by id(conn).
+# sqlite3.Connection is a C type that does not support weak references.
+_graph_cache: dict[int, nx.DiGraph] = {}
 
 
 def build_call_graph(conn: sqlite3.Connection) -> nx.DiGraph:
@@ -24,6 +25,19 @@ def build_call_graph(conn: sqlite3.Connection) -> nx.DiGraph:
     for row in rows:
         G.add_edge(row["caller"], row["callee"])
     return G
+
+
+def build_call_graph_cached(conn: sqlite3.Connection) -> nx.DiGraph:
+    """Return cached call graph for this connection, building it on first access."""
+    key = id(conn)
+    if key not in _graph_cache:
+        _graph_cache[key] = build_call_graph(conn)
+    return _graph_cache[key]
+
+
+def invalidate_graph_cache(conn: sqlite3.Connection) -> None:
+    """Discard the cached graph for conn (call after writing new index data)."""
+    _graph_cache.pop(id(conn), None)
 
 
 def reachable_from(G: nx.DiGraph, start: str, max_depth: int) -> list[str]:
