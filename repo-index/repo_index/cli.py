@@ -25,15 +25,37 @@ _DEFAULT_DB = _DB_DIR / "index.db"
 
 
 def _db_path(db_file: Optional[Path], cwd: Optional[Path] = None) -> Path:
-    """Resolve DB path. Priority: explicit flag > REPO_INDEX_DB env > git-root name > default."""
+    """Resolve DB path. Priority: explicit flag > REPO_INDEX_DB env > existing repo-local DB > existing git-root name DB > default.
+
+    Auto-detection:
+    1. Check for repo-index.db in repo root (project-local)
+    2. Check for <git-root-name>.db in ~/.local/share/repo-index/ (global indexed)
+    3. Fall back to default ~/.local/share/repo-index/index.db
+    """
     if db_file:
         return db_file
+
     env = os.environ.get("REPO_INDEX_DB")
     if env:
         return Path(env)
-    repo_root = git.git_root(cwd or Path.cwd())
+
+    cwd_path = cwd or Path.cwd()
+
+    # Check for repo-local database first
+    repo_root = git.git_root(cwd_path)
     if repo_root:
-        return _DB_DIR / f"{repo_root.name}.db"
+        local_db = repo_root / "repo-index.db"
+        if local_db.exists():
+            return local_db
+
+        # Check for git-root-named DB in global location
+        global_db = _DB_DIR / f"{repo_root.name}.db"
+        if global_db.exists():
+            return global_db
+
+        # Return derived path (will be created on first index)
+        return global_db
+
     return _DEFAULT_DB
 
 

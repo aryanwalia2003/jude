@@ -16,7 +16,15 @@ app = typer.Typer(help="Code metrics and architecture health.", add_completion=F
 
 
 def _db_path(db_file: Optional[Path], cwd: Path = Path.cwd()) -> Path:
-    """Resolve database path: explicit flag > env var > git-root DB > default."""
+    """Resolve DB path. Auto-detects existing databases.
+
+    Priority: explicit flag > REPO_INDEX_DB env > repo-local DB > git-root name DB > default.
+
+    Auto-detection:
+    1. Check for repo-index.db in repo root (project-local)
+    2. Check for <git-root-name>.db in ~/.local/share/repo-index/ (global indexed)
+    3. Fall back to default ~/.local/share/repo-index/index.db
+    """
     import os
     from . import git
 
@@ -27,11 +35,21 @@ def _db_path(db_file: Optional[Path], cwd: Path = Path.cwd()) -> Path:
         return Path(env_db)
 
     try:
-        git_root = git.repo_root(cwd)
-        db_name = git_root.name or "index"
-        default_db = Path.home() / ".local/share/repo-index" / f"{db_name}.db"
-        if default_db.exists():
-            return default_db
+        git_root = git.git_root(cwd)
+        if git_root:
+            # Check for repo-local database first
+            local_db = git_root / "repo-index.db"
+            if local_db.exists():
+                return local_db
+
+            # Check for git-root-named DB in global location
+            db_dir = Path.home() / ".local/share/repo-index"
+            global_db = db_dir / f"{git_root.name}.db"
+            if global_db.exists():
+                return global_db
+
+            # Return derived path (will be created on first index)
+            return global_db
     except Exception:
         pass
 
