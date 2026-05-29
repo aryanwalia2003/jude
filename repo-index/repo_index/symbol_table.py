@@ -9,13 +9,32 @@ def file_to_module(file_path: str) -> str:
     repo_index/db.py  →  repo_index.db
     auth/jwt.py       →  auth.jwt
     auth/__init__.py  →  auth
+    auth/service.go   →  auth.service
+    components/Button.jsx → components.Button
     """
     p = Path(file_path)
     parts = list(p.parts)
-    if parts and parts[-1].endswith(".py"):
-        parts[-1] = parts[-1][:-3]
-    if parts and parts[-1] == "__init__":
-        parts = parts[:-1]
+    if not parts:
+        return ""
+
+    filename = parts[-1]
+
+    # Handle Python files
+    if filename.endswith(".py"):
+        parts[-1] = filename[:-3]
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+    # Handle Go files
+    elif filename.endswith(".go"):
+        parts[-1] = filename[:-3]
+    # Handle JavaScript/TypeScript files
+    elif any(filename.endswith(ext) for ext in [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]):
+        # Find the extension and remove it
+        for ext in [".jsx", ".tsx", ".mjs", ".cjs", ".js", ".ts"]:
+            if filename.endswith(ext):
+                parts[-1] = filename[:-len(ext)]
+                break
+
     return ".".join(parts)
 
 

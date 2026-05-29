@@ -28,7 +28,7 @@ def test_python_file_is_indexable():
 
 def test_non_python_file_is_not_indexable():
     assert not is_indexable(Path("project/README.md"))
-    assert not is_indexable(Path("project/main.go"))
+    assert not is_indexable(Path("project/main.c"))
 
 
 def test_file_in_skip_dir_is_not_indexable():

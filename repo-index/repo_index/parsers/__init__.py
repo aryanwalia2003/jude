@@ -4,9 +4,14 @@ from pathlib import Path
 
 from .base import BaseParser, ParseResult
 from .python import PythonParser
+from .go import GoParser
+from .javascript import JavaScriptParser, TypeScriptParser
 
 _PARSERS: list[BaseParser] = [
     PythonParser(),
+    GoParser(),
+    JavaScriptParser(),
+    TypeScriptParser(),
 ]
 
 _EXT_MAP: dict[str, BaseParser] = {

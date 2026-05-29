@@ -3,17 +3,24 @@
 import subprocess
 from pathlib import Path
 
-from .parsers import get_parser
+from .parsers import get_parser, _PARSERS
 
 
 _SKIP_DIRS = {
-    ".git", ".hg", ".svn", "node_modules", "__pycache__",
-    ".venv", "venv", "env", ".env", "dist", "build",
-    ".mypy_cache", ".pytest_cache", ".ruff_cache", "target",
-    ".tox", "coverage", ".coverage",
+    # VCS
+    ".git", ".hg", ".svn",
+    # Python
+    "__pycache__", ".venv", "venv", "env", ".env",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    # Node.js / JavaScript
+    "node_modules", ".next", "dist", "build", ".webpack",
+    # Go
+    ".go", "vendor",
+    # General
+    "target", ".tox", "coverage", ".coverage",
 }
 
-_SUPPORTED_EXTENSIONS = {".py"}  # grows as parsers are added
+_SUPPORTED_EXTENSIONS = {ext for parser in _PARSERS for ext in parser.extensions}
 
 
 def is_indexable(path: Path) -> bool:
