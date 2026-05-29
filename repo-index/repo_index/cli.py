@@ -14,8 +14,10 @@ from rich import box
 from . import db, git, indexer, retrieval, resolver
 from .events import EventKind, FileEvent
 from .watcher import FileWatcher
+from . import cli_metrics
 
 app = typer.Typer(help="Repository intelligence — AST-aware symbol index.", add_completion=False)
+app.add_typer(cli_metrics.app, name="metrics")
 console = Console()
 
 _DB_DIR = Path.home() / ".local" / "share" / "repo-index"
