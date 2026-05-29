@@ -37,11 +37,46 @@ from .taxonomy import (
 )
 
 app = typer.Typer(
-    help="Deterministic prompt engine — compile developer intent into structured AI instructions.",
+    help=(
+        "Deterministic prompt engine — compile developer intent into structured AI instructions.\n\n"
+        "The engine classifies your natural-language goal, pulls relevant symbols from the repo\n"
+        "index (via repo-index), enforces task-appropriate constraints, and emits a structured,\n"
+        "budget-capped prompt. No LLM is invoked by the engine itself.\n\n"
+        "Quick start:\n\n"
+        "  ai fix  'null pointer in UserService.getById when id is 0'\n"
+        "  ai feat 'add rate limiting to the /auth/token endpoint'\n"
+        "  ai run  'the search returns stale results after reindex'\n\n"
+        "Most useful flags:\n\n"
+        "  --explain    Show task plan: classification, context pulled, constraints active\n"
+        "  --dry-run    Show the fully compiled prompt (all blocks assembled)\n"
+        "  --compact    Print the raw prompt string — pipe to clipboard or LLM\n"
+        "  --preset     Apply a named config  (run 'ai show presets' for the full list)\n"
+        "  --mode       Override the reasoning mode  (run 'ai show modes' for the full list)\n\n"
+        "Discovery:\n\n"
+        "  ai show tasks        All task types and descriptions\n"
+        "  ai show modes        All reasoning modes\n"
+        "  ai show presets      All named presets\n"
+        "  ai show profiles     All execution profiles\n"
+        "  ai show constraints  All constraints and their meaning\n"
+        "  ai show policy       Active universal rules + any repo-local policy"
+    ),
     add_completion=True,
     no_args_is_help=True,
 )
-show_app = typer.Typer(help="Discover available task types, modes, constraints, and presets.", no_args_is_help=True)
+show_app = typer.Typer(
+    help=(
+        "Discover task types, modes, constraints, presets, profiles, and active policy.\n\n"
+        "Commands:\n\n"
+        "  ai show tasks        Full list of task types with descriptions\n"
+        "  ai show task <name>  Default mode, constraints, and output contract for one type\n"
+        "  ai show modes        All reasoning modes and what they change\n"
+        "  ai show constraints  Every constraint and its meaning\n"
+        "  ai show presets      Named configurations (bugfix/safe, refactor/compatibility, ...)\n"
+        "  ai show profiles     Cross-cutting execution profiles (fast, strict, architectural, ...)\n"
+        "  ai show policy       Universal rules always active + any repo-local policy"
+    ),
+    no_args_is_help=True,
+)
 app.add_typer(show_app, name="show")
 
 console = Console()
@@ -51,10 +86,38 @@ err = Console(stderr=True)
 # Shared flag definitions
 # ---------------------------------------------------------------------------
 
-_MODE_HELP = "Reasoning mode: surgical|deep|fast|safe|explore|strict|minimal|architectural|debug|rewrite|maintain"
-_SCOPE_HELP = "Scope hint — module, service, or file name"
-_PRESET_HELP = "Named preset, e.g. bugfix/surgical or refactor/safe"
-_PROFILE_HELP = "Profile: fast|balanced|strict|architectural|experimental"
+_MODE_HELP = (
+    "Reasoning mode — controls context depth, constraints, and output verbosity.\n"
+    "Values:\n"
+    "  surgical     Smallest possible change, minimal context  (default for fix, ref, clean)\n"
+    "  deep         Full context gathering, second-order effects  (default for feat, opt)\n"
+    "  fast         Compact output, reduced context  (skips optional contract fields)\n"
+    "  safe         Conservative changes, strong verification, flag every risk\n"
+    "  explore      Present 2-3 candidate approaches before committing\n"
+    "  strict       Explicit assumptions, verbose output, guardrails on\n"
+    "  minimal      Ultra-compact — bare minimum context and output\n"
+    "  architectural  Design-boundary and invariant focus\n"
+    "  debug        Root-cause first, evidence-driven  (default for 'ai debug')\n"
+    "  rewrite      Free to reshape internals; higher change scope accepted\n"
+    "  maintain     Bias toward repo consistency and low churn"
+)
+_SCOPE_HELP = (
+    "Scope hint — module, service, or file name.\n"
+    "Guides the symbol retrieval query and helps the classifier narrow context.\n"
+    "Examples: --scope payments  --scope 'auth middleware'  --scope user_service.py"
+)
+_PRESET_HELP = (
+    "Named preset bundling task type + mode + extra constraints.\n"
+    "Examples: bugfix/minimal  bugfix/safe  bugfix/deep  refactor/safe\n"
+    "         refactor/compatibility  test/coverage-first  security/strict\n"
+    "         migration/careful  review/strict  feature/surgical\n"
+    "Run 'ai show presets' for the full list."
+)
+_PROFILE_HELP = (
+    "Execution profile applied on top of the task type.\n"
+    "Values: fast | balanced | strict | architectural | experimental\n"
+    "Run 'ai show profiles' for descriptions."
+)
 
 
 def _parse_mode(value: Optional[str]) -> Optional[Mode]:
@@ -290,14 +353,14 @@ def _make_task_command(task_type: TaskType, name: str, help_text: str):
         scope: Optional[str] = typer.Option(None, "--scope", "-s", help=_SCOPE_HELP),
         preset: Optional[str] = typer.Option(None, "--preset", help=_PRESET_HELP),
         profile: Optional[str] = typer.Option(None, "--profile", help=_PROFILE_HELP),
-        preserve_api: bool = typer.Option(False, "--preserve-api", help="Add preserve_public_api constraint"),
-        no_tests: bool = typer.Option(False, "--no-tests", help="Remove require_tests constraint"),
-        dry_run: bool = typer.Option(False, "--dry-run", help="Show compiled plan without invoking LLM"),
-        explain: bool = typer.Option(False, "--explain", help="Explain classification and context choices"),
-        compact: bool = typer.Option(False, "--compact", help="Output compiled prompt only"),
-        strict: bool = typer.Option(False, "--strict", help="Apply strict mode"),
-        safe: bool = typer.Option(False, "--safe", help="Apply safe mode"),
-        no_retrieve: bool = typer.Option(False, "--no-retrieve", help="Skip repo-index retrieval"),
+        preserve_api: bool = typer.Option(False, "--preserve-api", help="Enforce that no public interface or exported symbol is changed (adds preserve_public_api constraint)."),
+        no_tests: bool = typer.Option(False, "--no-tests", help="Allow output without tests — removes the require_tests constraint."),
+        dry_run: bool = typer.Option(False, "--dry-run", help="Print the fully compiled prompt (all blocks: system, task, constraints, context, contract, verification). Does not call any LLM."),
+        explain: bool = typer.Option(False, "--explain", help="Show task plan only: classification evidence, confidence, constraints, retrieved symbols, output contract. Does not print the compiled prompt."),
+        compact: bool = typer.Option(False, "--compact", help="Print only the raw compiled prompt string — useful for piping to a clipboard tool or LLM CLI."),
+        strict: bool = typer.Option(False, "--strict", help="Apply strict mode — explicit assumptions, verbose output, no guessing. Shortcut for --mode strict."),
+        safe: bool = typer.Option(False, "--safe", help="Apply safe mode — conservative changes, flag every risk. Shortcut for --mode safe."),
+        no_retrieve: bool = typer.Option(False, "--no-retrieve", help="Skip the repo-index symbol lookup. Useful when the index is stale, unavailable, or you want to provide context manually in the prompt."),
     ) -> None:
         _run_task(
             goal=goal,
@@ -321,25 +384,183 @@ def _make_task_command(task_type: TaskType, name: str, help_text: str):
 
 
 # Register verb commands
-_make_task_command(TaskType.BUGFIX, "fix", "Fix a bug — root cause, minimal patch, tests")
-_make_task_command(TaskType.FEATURE, "feat", "Implement a new feature")
-_make_task_command(TaskType.REFACTOR, "ref", "Refactor code without changing behavior")
-_make_task_command(TaskType.TEST_GENERATION, "test", "Generate tests for a function or module")
-_make_task_command(TaskType.DEBUGGING, "debug", "Investigate and diagnose a problem")
-_make_task_command(TaskType.EXPLANATION, "explain", "Explain how code works")
-_make_task_command(TaskType.OPTIMIZATION, "opt", "Optimize for performance")
-_make_task_command(TaskType.MIGRATION, "migrate", "Plan a migration")
-_make_task_command(TaskType.CODE_REVIEW, "review", "Review code for issues")
-_make_task_command(TaskType.SECURITY, "secure", "Fix or audit a security issue")
-_make_task_command(TaskType.CLEANUP, "clean", "Remove dead code and obsolete patterns")
-_make_task_command(TaskType.OBSERVABILITY, "observe", "Add logging, metrics, or tracing")
+_make_task_command(TaskType.BUGFIX, "fix",
+    "Fix a bug — minimal patch, root cause, regression test.\n\n"
+    "Default mode: surgical  |  Risk: medium\n"
+    "Default constraints: minimal_diff, preserve_public_api, no_unrelated_refactors,\n"
+    "  require_tests, require_risk_analysis, follow_existing_patterns\n"
+    "Output contract fields: symptom, root_cause, trigger, affected_code_paths,\n"
+    "  fix_strategy, patch, tests, regression_risks\n\n"
+    "Presets: bugfix/minimal  bugfix/safe  bugfix/deep\n\n"
+    "Examples:\n"
+    "  ai fix 'null pointer in UserService.getById when id is 0'\n"
+    "  ai fix 'payment double-charge on retry' --preset bugfix/safe\n"
+    "  ai fix 'race condition in session cache' --mode deep --explain\n"
+    "  ai fix 'auth regression in v2.3' --scope auth --dry-run"
+)
+_make_task_command(TaskType.FEATURE, "feat",
+    "Implement a new feature — design decision, tests, compatibility notes.\n\n"
+    "Default mode: deep  |  Risk: medium\n"
+    "Default constraints: follow_existing_patterns, require_tests,\n"
+    "  no_unnecessary_abstractions, avoid_new_dependencies\n"
+    "Output contract fields: goal, design_choice, affected_interfaces, patch,\n"
+    "  tests, compatibility_notes, risks\n\n"
+    "Presets: feature/surgical  feature/default\n\n"
+    "Examples:\n"
+    "  ai feat 'add rate limiting to the /auth/token endpoint'\n"
+    "  ai feat 'webhook delivery retry with exponential backoff' --preset feature/surgical\n"
+    "  ai feat 'background job for stale session cleanup' --scope session --mode deep\n"
+    "  ai feat 'add --verbose flag to the build command' --preserve-api"
+)
+_make_task_command(TaskType.REFACTOR, "ref",
+    "Refactor code without changing observable behavior.\n\n"
+    "Default mode: safe  |  Risk: medium\n"
+    "Default constraints: preserve_public_api, preserve_behavior, no_unrelated_refactors,\n"
+    "  require_tests, require_risk_analysis, keep_file_churn_low\n"
+    "Output contract fields: current_shape, target_shape, migration_path, patch,\n"
+    "  compatibility, risk_analysis, tests\n\n"
+    "Presets: refactor/safe  refactor/compatibility\n\n"
+    "Examples:\n"
+    "  ai ref 'extract payment logic from OrderService into PaymentService'\n"
+    "  ai ref 'simplify the retrieval pipeline into a single fetch() call'\n"
+    "  ai ref 'decouple auth middleware from route handlers' --preset refactor/compatibility\n"
+    "  ai ref 'consolidate the three DB helpers into db_utils' --scope db --mode safe"
+)
+_make_task_command(TaskType.TEST_GENERATION, "test",
+    "Generate tests for a function or module — coverage plan, fixtures, edge cases.\n\n"
+    "Default mode: surgical  |  Risk: low\n"
+    "Default constraints: follow_existing_patterns, require_explanation,\n"
+    "  prefer_existing_helpers\n"
+    "Output contract fields: coverage_plan, fixtures, tests, gaps (optional)\n\n"
+    "Presets: test/coverage-first\n\n"
+    "Examples:\n"
+    "  ai test 'generate tests for the retrieval bridge'\n"
+    "  ai test 'write unit tests for search_symbols_ranked' --scope repo_index\n"
+    "  ai test 'integration tests for the /auth/token endpoint' --preset test/coverage-first\n"
+    "  ai test 'edge cases for _trim() in retrieval.py' --no-retrieve"
+)
+_make_task_command(TaskType.DEBUGGING, "debug",
+    "Investigate and diagnose a problem — evidence-first, root cause, next steps.\n\n"
+    "Default mode: debug  |  Risk: low\n"
+    "Default constraints: no_guessing, require_explanation, require_risk_analysis\n"
+    "Output contract fields: reproduction, evidence, likely_cause, uncertainty,\n"
+    "  next_steps, patch_if_applicable (optional)\n\n"
+    "Presets: debug/deep\n\n"
+    "Examples:\n"
+    "  ai debug 'flaky timeout in the websocket handler'\n"
+    "  ai debug 'intermittent 500 on /api/search — only under concurrent load'\n"
+    "  ai debug 'why does the graph cache miss on every second call?' --scope graph\n"
+    "  ai debug 'deadlock in session store under high write concurrency' --preset debug/deep"
+)
+_make_task_command(TaskType.EXPLANATION, "explain",
+    "Explain how code works — summary, key concepts, data flow, gotchas.\n\n"
+    "Default mode: deep  |  Risk: low\n"
+    "Default constraints: no_guessing, require_explanation\n"
+    "Output contract fields: summary, key_concepts, data_flow, invariants (opt), gotchas (opt)\n\n"
+    "Examples:\n"
+    "  ai explain 'how does the composite ranking score work'\n"
+    "  ai explain 'what does build_call_graph_cached do and why is it keyed by id(conn)'\n"
+    "  ai explain 'walk me through the prompt compilation pipeline'\n"
+    "  ai explain 'how does _resolve_db pick which .db file to open' --scope retrieval"
+)
+_make_task_command(TaskType.OPTIMIZATION, "opt",
+    "Optimize for performance — identify bottleneck, measure, patch, state trade-offs.\n\n"
+    "Default mode: deep  |  Risk: medium\n"
+    "Default constraints: preserve_behavior, no_performance_regression,\n"
+    "  require_explanation, require_risk_analysis\n"
+    "Output contract fields: bottleneck, evidence, fix_strategy, patch,\n"
+    "  expected_gain, risks\n\n"
+    "Examples:\n"
+    "  ai opt 'reduce allocations in the hot path of search_symbols_ranked'\n"
+    "  ai opt 'the FTS5 query is slow on large indexes' --scope db\n"
+    "  ai opt 'build_call_graph rebuilds on every MCP call' --mode surgical\n"
+    "  ai opt 'retrieval bridge is hitting the DB 7x per task' --preset debug/deep"
+)
+_make_task_command(TaskType.MIGRATION, "migrate",
+    "Plan a migration — dual-write strategy, rollback plan, backfill, risk analysis.\n\n"
+    "Default mode: safe  |  Risk: high\n"
+    "Default constraints: no_backward_compat_break, no_schema_change_without_migration,\n"
+    "  require_explanation, require_risk_analysis\n"
+    "Output contract fields: scope, compatibility_constraints, migration_steps,\n"
+    "  rollback_plan, backfill_needs, risks, patch\n\n"
+    "Presets: migration/careful\n\n"
+    "Examples:\n"
+    "  ai migrate 'move from SQLite FTS4 to FTS5'\n"
+    "  ai migrate 'rename repo_root column in meta table' --preset migration/careful\n"
+    "  ai migrate 'move from FastMCP 0.x to 1.x API' --scope mcp_server\n"
+    "  ai migrate 'replace the per-connection graph cache with a module-level LRU'"
+)
+_make_task_command(TaskType.CODE_REVIEW, "review",
+    "Review code for issues — severity-ranked findings, rationale, suggested fixes.\n\n"
+    "Default mode: strict  |  Risk: low\n"
+    "Default constraints: no_guessing, require_explanation\n"
+    "Output contract fields: issues_found, severity_summary, rationale,\n"
+    "  suggested_changes, non_issues, confidence\n\n"
+    "Presets: review/strict\n\n"
+    "Examples:\n"
+    "  ai review 'check the new FTS5 migration for safety'\n"
+    "  ai review 'audit the MCP server tools for input validation'\n"
+    "  ai review 'look at the graph cache changes before merging' --preset review/strict\n"
+    "  ai review 'check the new /auth endpoint for security issues' --scope auth"
+)
+_make_task_command(TaskType.SECURITY, "secure",
+    "Fix or audit a security issue — attack vector, patch, verification.\n\n"
+    "Default mode: strict  |  Risk: high\n"
+    "Default constraints: no_security_regression, no_guessing, require_explanation,\n"
+    "  require_risk_analysis, preserve_behavior\n"
+    "Output contract fields: vulnerability, attack_vector, affected_paths,\n"
+    "  fix_strategy, patch, verification, related_risks (optional)\n\n"
+    "Presets: security/strict\n\n"
+    "Examples:\n"
+    "  ai secure 'SQL injection in the symbol search query'\n"
+    "  ai secure 'JWT secret is logged in debug output'\n"
+    "  ai secure 'audit input validation on all MCP tool parameters' --preset security/strict\n"
+    "  ai secure 'path traversal in repo_path parameter of open_connection_for' --scope mcp"
+)
+_make_task_command(TaskType.CLEANUP, "clean",
+    "Remove dead code, unused imports, stale TODOs, and obsolete patterns.\n\n"
+    "Default mode: surgical  |  Risk: low\n"
+    "Default constraints: follow_existing_patterns, no_speculative_cleanup\n"
+    "Output contract fields: summary, changes, rationale, risks\n\n"
+    "Examples:\n"
+    "  ai clean 'remove dead code in the indexer module'\n"
+    "  ai clean 'delete unused imports across the prompt_engine package'\n"
+    "  ai clean 'clear stale TODO comments in retrieval.py' --scope retrieval\n"
+    "  ai clean 'remove the legacy _graph_cache fallback after the new cache landed'"
+)
+_make_task_command(TaskType.OBSERVABILITY, "observe",
+    "Add logging, metrics, tracing, or alerting — structured, low-noise, meaningful.\n\n"
+    "Default mode: surgical  |  Risk: low\n"
+    "Default constraints: no_logging_noise, follow_existing_patterns\n"
+    "Output contract fields: summary, changes, rationale, risks\n\n"
+    "Examples:\n"
+    "  ai observe 'add structured logging to the MCP server tools'\n"
+    "  ai observe 'instrument retrieve() with latency and symbol-count metrics'\n"
+    "  ai observe 'add a warning log when the graph cache is rebuilt' --scope graph\n"
+    "  ai observe 'log retrieval notes at DEBUG level in the prompt engine'"
+)
 
 
 # ---------------------------------------------------------------------------
 # Generic `ai run` — natural language without a verb
 # ---------------------------------------------------------------------------
 
-@app.command(name="run", help="Run any task from natural language — task type inferred automatically.")
+@app.command(name="run", help=(
+    "Run any task — task type inferred automatically from the goal text.\n\n"
+    "The classifier scores your goal against keyword tables for all task types and picks\n"
+    "the highest match. Use --explain to see the score and evidence. Use --type to override\n"
+    "if classification is wrong.\n\n"
+    "Use a verb command (fix, feat, ref, ...) when you know the task type — it gives better\n"
+    "defaults and a more specific output contract. Use 'ai run' for ambiguous or compound goals.\n\n"
+    "Examples:\n"
+    "  ai run 'the payment webhook is firing twice'\n"
+    "  ai run 'add caching to the search endpoint' --type feat --scope search\n"
+    "  ai run 'slow query on user listing' --type opt --mode deep\n"
+    "  ai run 'auth middleware needs rate limiting and better logging' --explain\n\n"
+    "Valid --type values: bugfix, feature, refactor, test_generation, debugging, explanation,\n"
+    "  optimization, migration, code_review, security, cleanup, observability, performance,\n"
+    "  reliability, architecture, documentation  (run 'ai show tasks' for the full list)"
+))
 def cmd_run(
     goal: str = typer.Argument(..., help="Natural language intent"),
     task_type: Optional[str] = typer.Option(None, "--type", "-t", help="Force task type"),
@@ -354,7 +575,7 @@ def cmd_run(
     compact: bool = typer.Option(False, "--compact"),
     strict: bool = typer.Option(False, "--strict"),
     safe: bool = typer.Option(False, "--safe"),
-    no_retrieve: bool = typer.Option(False, "--no-retrieve", help="Skip repo-index retrieval"),
+    no_retrieve: bool = typer.Option(False, "--no-retrieve", help="Skip the repo-index symbol lookup. Useful when the index is stale, unavailable, or you want to supply context manually."),
 ) -> None:
     hint: Optional[TaskType] = None
     if task_type:
@@ -389,7 +610,16 @@ def cmd_run(
 # Diagnostic commands
 # ---------------------------------------------------------------------------
 
-@app.command(name="plan", help="Show the full task plan for a goal (alias for 'run --explain').")
+@app.command(name="plan", help=(
+    "Show the task plan for a goal — classification evidence, confidence, constraints,\n"
+    "retrieved context, output contract, and token budget. Does not print the compiled prompt.\n\n"
+    "Use this to verify the engine classified your intent correctly before running a full task.\n"
+    "For the compiled prompt, use 'ai inspect' or add --dry-run to any verb command.\n\n"
+    "Examples:\n"
+    "  ai plan 'refactor the payment service'\n"
+    "  ai plan 'add rate limiting to auth' --type feat --scope auth\n"
+    "  ai plan 'race condition in session store' --type bugfix --mode deep"
+))
 def cmd_plan(
     goal: str = typer.Argument(...),
     task_type: Optional[str] = typer.Option(None, "--type", "-t"),
@@ -405,7 +635,16 @@ def cmd_plan(
     _render_plan(task, intent, dry_run=False, bundle=bundle)
 
 
-@app.command(name="inspect", help="Show what prompt would be compiled for a goal.")
+@app.command(name="inspect", help=(
+    "Show the complete compiled prompt for a goal — all blocks assembled, budget-capped,\n"
+    "ready to be fed to an LLM. Includes the task plan panel above the prompt.\n\n"
+    "Equivalent to running any verb command with --dry-run.\n"
+    "Use --compact to print only the raw prompt string without the plan panels.\n\n"
+    "Examples:\n"
+    "  ai inspect 'fix the null pointer in UserService'\n"
+    "  ai inspect 'add rate limiting' --type feat --no-retrieve\n"
+    "  ai inspect 'refactor payment service' --type ref --mode safe --compact"
+))
 def cmd_inspect(
     goal: str = typer.Argument(...),
     task_type: Optional[str] = typer.Option(None, "--type", "-t"),
