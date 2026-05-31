@@ -20,6 +20,9 @@ mcp = FastMCP(
     "repo-index",
     instructions=(
         "Repository intelligence: AST-indexed symbols, call graphs, and dependency analysis. "
+        "All search results include deterministic multi-factor ranking with audit trails: "
+        "each symbol shows scoring factors (text relevance, call frequency, recency, name match, code metrics) "
+        "so you can understand why symbols ranked where they did. "
         "Call build_index(path) first if the index is empty or outdated. "
         "Pass repo_path to all tools to route queries to the correct per-repo index."
     ),
