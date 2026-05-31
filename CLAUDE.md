@@ -133,13 +133,64 @@ Adjust and re-run `repo-index build` to see immediate, deterministic impact.
 4. Same question next week retrieves same symbols, same order
 5. Claude can reason about "why did the system prioritize THIS symbol?"
 
+## Output Schema Enforcement
+
+Task outputs are validated against **JSON schemas** derived from OutputContract:
+
+**Example output for `debug emit_sync`:**
+```json
+{
+  "task_type": "debugging",
+  "timestamp": "2026-05-31T11:30:00Z",
+  "schema_version": "1.0",
+  "output": {
+    "reproduction": "Call emit_sync with no listeners",
+    "evidence": "Stack trace shows undefined callback",
+    "likely_cause": "Missing null check in _emit_internal",
+    "uncertainty": "Whether this affects all call sites",
+    "next_steps": "Add guard clause, run full test suite"
+  },
+  "context_audit": {
+    "symbols_retrieved": 67,
+    "top_symbol": "emit_sync",
+    "top_symbol_score": 6.234
+  },
+  "validation": {
+    "is_valid": true,
+    "required_fields_present": true,
+    "schema_version": "1.0"
+  }
+}
+```
+
+**Why it matters:**
+- ✅ **Deterministic** — Same task + same context = same schema + same validation
+- ✅ **Auditable** — Every field traced to ranking audit
+- ✅ **Structured** — JSON parseable, not freeform text
+- ✅ **Reproducible** — STRICT mode enforces schema at compilation time
+
+**Integration with modes:**
+- `--mode strict` — Enforces schema validation
+- `--mode safe` — Validates before returning output
+- `--mode deep` — Includes full audit trail + impact analysis
+- `--output json` — Returns structured JSON with schemas
+
 ## Files
 
+### Ranking & Context
 - `repo-index/repo_index/ranking.py` — Multi-factor scoring + audit trails
 - `repo-index/repo_index/retrieval.py` — Context assembly with ranking
 - `mcp-server/repo_index_mcp/serializers.py` — JSON serialization of audit data
-- `~/.claude/scripts/crank` — CLI tool for interactive ranking inspection
-- `~/.claude/DETERMINISTIC-RANKING.md` — Full feature documentation
+
+### Output Schemas & Validation
+- `prompt-engine/prompt_engine/schemas.py` — JSON schema generation from OutputContract
+- `prompt-engine/prompt_engine/validator.py` — Output validation against schemas
+- `prompt-engine/prompt_engine/output_serializer.py` — Serialization with audits
+
+### Tools & Docs
+- `~/.claude/scripts/crank` — CLI for ranking inspection with `--audit` flag
+- `~/.claude/DETERMINISTIC-RANKING.md` — Ranking feature documentation
+- `IMPLEMENTATION_PLAN_OUTPUT_SCHEMAS.md` — Output schema architecture
 
 ## Testing
 
@@ -147,7 +198,11 @@ Adjust and re-run `repo-index build` to see immediate, deterministic impact.
 # Verify ranking + audit trail
 crank --audit parse
 
-# Expected output: ranked results with factor breakdown + percentages
+# Run all tests (retrieval + schemas)
+pytest prompt-engine/tests/
 ```
 
-All 34 retrieval tests pass with deterministic ranking enabled.
+**Test coverage:**
+- 54 retrieval tests (ranking + context)
+- 27 schema tests (generation + validation + serialization)
+- All 81 tests passing ✓
