@@ -15,6 +15,7 @@ import networkx as nx
 
 from . import db
 from .graph import build_call_graph_cached, reachable_from, reverse_reachable
+from . import ranking
 
 
 @dataclass
@@ -28,11 +29,12 @@ class SearchResult:
     caller_count: int = 0
     last_indexed_at: int = 0
     composite_score: float = 0.0
+    audit: ranking.RankingAudit | None = None
 
 
 @dataclass
 class RetrievalContext:
-    """Assembled context for one symbol — ready to feed to an LLM."""
+    """Assembled context for one symbol — ready for analysis."""
     name: str
     kind: str
     file_path: str
@@ -43,6 +45,7 @@ class RetrievalContext:
     file_imports: list[str] = field(default_factory=list) # module-level imports
     callgraph: list[str] = field(default_factory=list)    # transitive callees (BFS)
     impact: list[str] = field(default_factory=list)       # transitive callers (BFS)
+    impact_audit: ranking.RankingAudit | None = None      # audit trail for impact scoring
 
 
 def search(
@@ -51,26 +54,15 @@ def search(
     kind: str | None = None,
     limit: int = 20,
 ) -> list[SearchResult]:
-    """FTS search with multi-signal re-ranking: BM25 + caller-hub + recency + path-match."""
-    rows = db.search_symbols_ranked(conn, query, kind=kind, limit=limit)
+    """FTS search with deterministic multi-factor ranking and audit trail."""
+    rows = db.search_symbols_ranked(conn, query, kind=kind, limit=limit * 2)
     if not rows:
         return []
 
-    keywords = {t.lower() for t in query.split() if t}
-    max_time = max((r["last_indexed_at"] for r in rows), default=1) or 1
+    ranked, audit_trail = ranking.rank_search_results(conn, rows, query, limit=limit * 2)
 
     results: list[SearchResult] = []
-    for row in rows:
-        # BM25: FTS5 returns negative values — flip so higher = more relevant
-        bm25 = -(row["bm25_score"])
-        # Caller-hub: log-scaled number of callers — frequently-called symbols rank higher
-        hub = math.log1p(row["caller_count"]) * 0.5
-        # Recency: recently indexed files are more likely to be in-scope
-        recency = (row["last_indexed_at"] / max_time) * 0.3
-        # Path bonus: file path contains query keywords
-        path_lower = row["file_path"].lower()
-        path_bonus = 0.4 * sum(1 for kw in keywords if kw in path_lower)
-        composite = bm25 + hub + recency + path_bonus
+    for row, audit in zip(ranked, audit_trail):
         results.append(SearchResult(
             name=row["name"],
             kind=row["kind"],
@@ -80,10 +72,10 @@ def search(
             bm25_score=row["bm25_score"],
             caller_count=row["caller_count"],
             last_indexed_at=row["last_indexed_at"],
-            composite_score=composite,
+            composite_score=row["composite_score"],
+            audit=audit,
         ))
 
-    results.sort(key=lambda r: r.composite_score, reverse=True)
     return results[:limit]
 
 
@@ -105,7 +97,7 @@ def get_context(
     callgraph_depth: int = 2,
     graph: nx.DiGraph | None = None,
 ) -> RetrievalContext | None:
-    """Assemble full context for a symbol. Pass graph= to reuse a cached graph across batch calls."""
+    """Assemble full context for a symbol with impact audit."""
     rows = db.query_symbol(conn, name)
     if not rows:
         return None
@@ -116,6 +108,18 @@ def get_context(
     direct_calls = _direct_calls(conn, name)
     direct_callers = [r["caller"] for r in db.query_callers(conn, name)]
     imports = [r["import_name"] for r in db.query_imports(conn, row["file_path"])]
+    impact_symbols = reverse_reachable(G, name, callgraph_depth)
+
+    # Compute impact audit trail
+    impact_score, impact_factors = ranking.context_impact_score(conn, name, impact_symbols)
+    impact_audit = ranking.RankingAudit(
+        name=name,
+        kind=row["kind"],
+        file_path=row["file_path"],
+        rank_position=0,  # not a ranking position
+        composite_score=impact_score,
+        factors=impact_factors,
+    )
 
     return RetrievalContext(
         name=name,
@@ -127,7 +131,8 @@ def get_context(
         called_by=direct_callers,
         file_imports=imports,
         callgraph=reachable_from(G, name, callgraph_depth),
-        impact=reverse_reachable(G, name, callgraph_depth),
+        impact=impact_symbols,
+        impact_audit=impact_audit,
     )
 
 
