@@ -1,15 +1,35 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "prompt-engine"
+name = "jude-prompt-engine"
 version = "0.1.0"
+description = "Deterministic prompt compiler and optimizer for AI-driven code analysis"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Aryan Walia", email = "p0riya003@gmail.com"}]
 requires-python = ">=3.10"
+keywords = ["prompt-engineering", "ai-agents", "code-analysis", "deterministic"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "typer>=0.9",
     "rich>=13",
 ]
+
+[project.urls]
+Homepage = "https://github.com/aryanwalia2003/jude"
+Repository = "https://github.com/aryanwalia2003/jude"
+Issues = "https://github.com/aryanwalia2003/jude/issues"
+Documentation = "https://github.com/aryanwalia2003/jude/tree/main/prompt-engine"
 
 [project.scripts]
 ai = "prompt_engine.cli:app"
