@@ -20,7 +20,6 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries",
-    "Topic :: Software Development :: Tools",
 ]
 dependencies = [
     "typer>=0.9",
@@ -32,10 +31,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/aryanwalia/ai-infra"
-Repository = "https://github.com/aryanwalia/ai-infra"
-Issues = "https://github.com/aryanwalia/ai-infra/issues"
-Documentation = "https://github.com/aryanwalia/ai-infra/tree/main/repo-index"
+Homepage = "https://github.com/aryanwalia2003/jude"
+Repository = "https://github.com/aryanwalia2003/jude"
+Issues = "https://github.com/aryanwalia2003/jude/issues"
+Documentation = "https://github.com/aryanwalia2003/jude/tree/main/repo-index"
 
 [project.scripts]
 repo-index = "repo_index.cli:app"
