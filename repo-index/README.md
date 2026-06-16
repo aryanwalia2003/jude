@@ -16,13 +16,23 @@
 
 ## 🛠️ Installation
 
-Ensure you have Python 3.10+ and `uv` (or `pip`) installed.
+Ensure you have Python 3.10+ installed.
+
+### Via pip (Recommended)
 
 ```bash
-# Clone the repository and install in editable mode
-cd ~/ai-infra/repo-index
+pip install repo-index
+```
+
+### From source (for development)
+
+```bash
+git clone https://github.com/aryanwalia/ai-infra.git
+cd ai-infra/repo-index
 pip install -e .
 ```
+
+### Database Location
 
 By default, `repo-index` stores its SQLite database at:
 `~/.local/share/repo-index/index.db`

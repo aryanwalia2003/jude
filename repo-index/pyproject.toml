@@ -1,11 +1,27 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "repo-index"
 version = "0.1.0"
+description = "Lightning-fast, deterministic repository indexing and retrieval for AI agents"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Aryan Walia", email = "p0riya003@gmail.com"}]
 requires-python = ">=3.10"
+keywords = ["ast", "indexing", "code-analysis", "repository", "ai-agents", "llm", "tree-sitter"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Tools",
+]
 dependencies = [
     "typer>=0.9",
     "rich>=13",
@@ -14,6 +30,12 @@ dependencies = [
     "networkx>=3",
     "watchdog>=4",
 ]
+
+[project.urls]
+Homepage = "https://github.com/aryanwalia/ai-infra"
+Repository = "https://github.com/aryanwalia/ai-infra"
+Issues = "https://github.com/aryanwalia/ai-infra/issues"
+Documentation = "https://github.com/aryanwalia/ai-infra/tree/main/repo-index"
 
 [project.scripts]
 repo-index = "repo_index.cli:app"
