@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "repo-index"
+name = "jude-repo-index"
 version = "0.1.0"
 description = "Lightning-fast, deterministic repository indexing and retrieval for AI agents"
 readme = "README.md"
